@@ -20,7 +20,10 @@ def hex_find(find_hex_values, data):
         if pos == -1:
             break
         pos += pre
-        pre_str = data[pos - 5: pos]
+        if pos < 5:
+            pre_str = data[0: pos]
+        else:
+            pre_str = data[pos - 5: pos]
         aft_str = data[pos + len(find_hex_values): pos + len(find_hex_values) + 5]
         try:
             res.append({
@@ -112,22 +115,36 @@ def get_hex(one, two):
                     return
     return find_hex_values
 
-def do_replace(find_hex_values, replace_hex_values, data):
-    res = None
+def do_replace(find_hex_values, find_res, replace_hex_values, data, idxs):
+    res = b''
+    if idxs:
+        res = data
+        l = len(find_hex_values)
+        for i in idxs:
+            pos = find_res[i].get('pos')
+            res = res[0: pos] + replace_hex_values + res[pos + l:]
+    else:
+        try:
+            is_go = str(raw_input('warning: The "-i" option is not specified, and all matches will be replaced by default. \nDo you want to continue?(yes/no):')).strip()
+        except NameError:
+            is_go = str(input('warning: The "-i" option is not specified, and all matches will be replaced by default. \nDo you want to continue?(yes/no):')).strip()
+        if is_go.startswith('y') or is_go.startswith('Y'):
+            res = data.replace(find_hex_values, replace_hex_values)
     return res
 
-def hex_replace(find_hex_values, replace_hex_values, data):
+def hex_replace(find_hex_values, find_res, replace_hex_values, data, idxs):
+    res = b''
     if len(find_hex_values) != len(replace_hex_values):
         try:
             is_go = str(raw_input('warning: Data length is different before and after replacement. \nDo you want to continue?(yes/no):')).strip()
         except NameError:
             is_go = str(input('warning: Data length is different before and after replacement. \nDo you want to continue?(yes/no):')).strip()
         if is_go.startswith('y') or is_go.startswith('Y'):
-            res = do_replace(find_hex_values, replace_hex_values, data)
+            res = do_replace(find_hex_values, find_res, replace_hex_values, data, idxs)
         else:
             print('Nothing be changed.')
     else:
-        res = do_replace(find_hex_values, replace_hex_values, data)
+        res = do_replace(find_hex_values, find_res, replace_hex_values, data, idxs)
     return res
 
 def main():
@@ -137,30 +154,40 @@ def main():
     parser.add_argument('-fs', metavar='findSmallEnd', type=str, nargs='+', help='Small end of hex value to look for.')
     parser.add_argument('-r', metavar='replace', type=str, nargs='+', help='Hex value to be replaced.')
     parser.add_argument('-rs', metavar='replaceSmallEnd', type=str, nargs='+', help='Small end of hex value to be replaced.')
+    parser.add_argument('-i', metavar='indexs', type=int, nargs='+', help='Indexs of Offset to be replaced.')
     parser.add_argument('-o', metavar='ouput', type=str, help='Output to a new file.')
     parser.add_argument('-a', metavar='all', nargs='?' , default=True, help='Show all result.')
     parser.add_argument('-v', action='version', version='%(prog)s 0.1')
     
     args = parser.parse_args()
     if os.path.exists(args.file):
-        print(args)#--
         f = open(args.file, 'rb')
         data = f.read()
         f.close()
         find_hex_values = get_hex(args.f, args.fs)
         replace_hex_values = get_hex(args.r, args.rs)
-        print(find_hex_values)#--
-        print(replace_hex_values)#--
         if replace_hex_values == None or find_hex_values == None:
             return
         if find_hex_values != b'':
             find_res = hex_find(find_hex_values, data)
-            print(find_res)
+            try:
+                find_hex_tmp = ' '.join(['%02x' % b for b in find_hex_values])
+            except:
+                find_hex_tmp = ' '.join(['%02x' % ord(b) for b in find_hex_values])
+            find_hex_tmp += ' ' * (14 - len(find_hex_tmp))
+            # print(find_res)
+            for i in range(len(find_res)):
+                f_res_idx = find_res[i]
+                print('Index {}:'.format(i))
+                print('   ...')
+                print('   {}  --< {}'.format(f_res_idx.get('pre'), f_res_idx.get('pre_str')))
+                print('>> {}  --< {} --< Offset: {}'.format(find_hex_tmp, find_hex_values, f_res_idx.get('pos')))
+                print('   {}  --< {}'.format(f_res_idx.get('aft'), f_res_idx.get('aft_str')))
+                print('   ...\n')
             if replace_hex_values != b'':
-                hex_replace(find_hex_values, replace_hex_values, data)
+                output = hex_replace(find_hex_values, find_res, replace_hex_values, data, args.i)
 
         # output a new file.
-        print(output)
         if output:
             if args.o:
                 if os.path.exists(args.o):
